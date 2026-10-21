@@ -1,0 +1,13 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Node / Scratch
+node_modules/
+*.log
+
+# Sensitive environment variables
+.env
+.env.*

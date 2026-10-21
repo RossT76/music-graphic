@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Music Reactive Display</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="stage"></canvas>
+
+  <div id="intro">
+    <h1>Music Reactive Display</h1>
+    <p>Choose an audio input below and press Listen.</p>
+  </div>
+
+  <!-- Controls are grouped. To add a control, put it in the matching group (or add a new .group). -->
+  <div id="controls">
+    <div class="group" role="group" aria-label="Input">
+      <span class="caption">Input</span>
+      <div class="row">
+        <select id="device" aria-label="Audio input device" class="btn" title="Audio input device"><option value="">Press Listen to choose an input</option></select>
+        <button id="mic" class="btn">Listen</button>
+      </div>
+    </div>
+
+    <div class="group" role="group" aria-label="Levels">
+      <span class="caption">Levels</span>
+      <div class="row">
+        <label class="slider" title="Sensitivity">Sens <input id="sens" type="range" min="0" max="100" value="50"></label>
+        <label class="slider" title="Noise gate: ignore sound quieter than this">Gate <input id="gate" type="range" min="0" max="60" value="0"></label>
+      </div>
+    </div>
+
+    <div class="group" role="group" aria-label="Visual">
+      <span class="caption">Visual <small>(&larr; &rarr;)</small></span>
+      <div class="row">
+        <button id="prev" class="btn" aria-label="Previous visual">&lsaquo;</button>
+        <select id="visual" aria-label="Visual" class="btn"></select>
+        <button id="next" class="btn" aria-label="Next visual">&rsaquo;</button>
+      </div>
+    </div>
+
+    <div class="group" role="group" aria-label="Display">
+      <span class="caption">Display <small>(B, F)</small></span>
+      <div class="row">
+        <select id="bg" aria-label="Background" class="btn" title="Background (B)">
+          <option value="black">Black</option>
+          <option value="green">Chroma green</option>
+          <option value="transparent">Transparent</option>
+        </select>
+        <button id="full" class="btn" title="Key F">Fullscreen</button>
+        <button id="obslink" class="btn" title="Copy a link for an OBS Browser Source">Copy OBS link</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="registry.js"></script>
+  <!-- Visualisations: one file each, listed in control-bar order. -->
+  <script src="visuals/bars.js"></script>
+  <script src="visuals/radial.js"></script>
+  <script src="visuals/particles.js"></script>
+  <script src="visuals/scope.js"></script>
+  <script src="visuals/tunnel.js"></script>
+  <script src="visuals/kaleidoscope.js"></script>
+  <script src="visuals/terrain.js"></script>
+  <script src="visuals/goo.js"></script>
+  <script src="visuals/xyscope.js"></script>
+  <script src="visuals/flower.js"></script>
+  <script src="visuals/rain.js"></script>
+  <script src="visuals/amoeba.js"></script>
+  <script src="visuals/lightning.js"></script>
+  <script src="visuals/tree.js"></script>
+  <script src="visuals/hypno.js"></script>
+  <script src="visuals/stereo.js"></script>
+  <script src="visuals/dancer.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

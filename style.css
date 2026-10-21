@@ -1,0 +1,98 @@
+* { box-sizing: border-box; }
+
+html { --bg: #000; }
+html[data-bg="green"] { --bg: #00ff00; }
+html[data-bg="transparent"] { --bg: transparent; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: #e8e8f0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow: hidden;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#intro {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 0.6s;
+}
+#intro h1 { font-weight: 300; letter-spacing: 0.15em; text-transform: uppercase; margin: 0 0 0.5em; }
+#intro p { opacity: 0.6; margin: 0; }
+#intro.hidden { opacity: 0; }
+#intro.error p { opacity: 1; color: #ff8a8a; max-width: 40em; padding: 0 16px; }
+
+/* Transparent preview: show a checkerboard in a normal browser, nothing in clean (OBS) mode. */
+html[data-bg="transparent"]:not(.clean) body {
+  background: repeating-conic-gradient(#1c1c22 0 25%, #26262d 0 50%) 0 0 / 28px 28px;
+}
+
+/* Clean mode: only the visual, plus error messages. */
+html.clean #controls { display: none; }
+html.clean #intro:not(.error) { display: none; }
+html.clean #intro h1 { display: none; }
+html.clean body { cursor: none; }
+
+#controls {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 20px;
+  width: fit-content;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 18px;
+  max-width: calc(100% - 32px);
+  padding: 10px 14px;
+  background: rgba(15, 15, 25, 0.65);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  transition: opacity 0.4s;
+}
+body.idle #controls { opacity: 0; pointer-events: none; }
+body.idle { cursor: none; }
+
+.btn {
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.btn:hover { background: rgba(255, 255, 255, 0.16); }
+.btn.active { background: rgba(120, 140, 255, 0.45); border-color: rgba(160, 175, 255, 0.7); }
+
+/* Each group is a small captioned cluster, so new controls slot in without crowding. */
+.group { display: flex; flex-direction: column; gap: 4px; }
+.caption { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.5; }
+.caption small { text-transform: none; letter-spacing: 0; }
+.row { display: flex; align-items: center; gap: 6px; }
+
+select.btn { max-width: 220px; }
+select.btn option { color: #000; }
+
+.slider { display: flex; align-items: center; gap: 6px; font-size: 13px; opacity: 0.85; }
+.slider input { width: 80px; }

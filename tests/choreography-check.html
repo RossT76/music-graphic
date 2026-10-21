@@ -1,0 +1,50 @@
+<!doctype html>
+<!-- Choreography check for the Dancer visual. Run it with: node tests/choreography-check.mjs
+     It plays a made-up track through the real dancer in virtual time (calm, build, drop, peak,
+     breakdown, groove at 120 BPM) and records every decision the dancer makes. -->
+<html><body><pre id="out">running</pre>
+<script src="../registry.js"></script>
+<script src="../visuals/dancer.js"></script>
+<script>
+const D = MRD.dancer, draw = MRD.visuals[0].draw;
+const cv = document.createElement('canvas'); cv.width = 100; cv.height = 125;
+const ctx = cv.getContext('2d');
+let vt = 1000;
+performance.now = () => vt;
+Math.random = (() => { let x = 4242; return () => (x = (x * 1103515245 + 12345) % 2147483648) / 2147483648; })();
+const state = { bass: .5, mid: .4, treble: .3, level: .3, beat: 0, onset: false, hue: 200,
+  subBass: .5, high: .3, snap: .2, clarity: 1, intensity: .5, relLevel: .5, punch: .3, locked: true, onsetCount: 0,
+  bpm: 120, period: 500, phase: 0, tick: false, beatCount: 100 };
+const api = { ctx, W: 100, H: 125, state, fade: () => ctx.clearRect(0, 0, 100, 125) };
+const START = 100;
+
+// The made-up track: [from beat, to beat, relative loudness at start, at end, punch]
+const SECTIONS = [[0, 16, .22, .22, .2, 'calm'], [16, 31, .3, .8, .4, 'build'], [31, 32, .1, .1, .1, 'gap'],
+  [32, 64, 1, 1, .9, 'drop + peak'], [64, 80, .22, .22, .2, 'breakdown'], [80, 112, .6, .6, .4, 'groove']];
+const loudAt = b => {
+  const s = SECTIONS.find(x => b >= x[0] && b < x[1]) || SECTIONS[SECTIONS.length - 1];
+  const f = (b - s[0]) / (s[1] - s[0]);
+  return { rel: s[2] + (s[3] - s[2]) * f, punch: s[4] };
+};
+let lastIdx = Math.floor(vt / 500);
+const TOTAL = 112;
+for (let i = 0; i < TOTAL * 30; i++) {
+  vt += 1000 / 60;
+  const beats = vt / 500, idx = Math.floor(beats);
+  state.tick = idx > lastIdx; if (state.tick) state.beatCount++;
+  lastIdx = idx; state.phase = beats - idx;
+  const b = state.beatCount - START + state.phase;
+  const { rel, punch } = loudAt(b);
+  state.relLevel = rel; state.level = 0.05 + 0.3 * rel; state.punch = punch;
+  state.intensity += (rel - state.intensity) * 0.015;
+  state.onset = state.tick && rel > 0.15;                 // a kick on every beat while the track is playing
+  state.beat = state.onset ? 1 : state.beat * 0.92;
+  draw(api);
+}
+const lowers = D.log.filter(e => e.kind === 'phrase').map(e => ({ beat: e.beat - START, lower: e.lower }));
+const incompatible = [];
+for (let i = 1; i < lowers.length; i++) if (!D.compatible(lowers[i - 1].lower, lowers[i].lower)) incompatible.push(`beat ${lowers[i].beat}: ${lowers[i - 1].lower} -> ${lowers[i].lower}`);
+document.getElementById('out').textContent = JSON.stringify({ incompatible,
+  sections: SECTIONS.map(s => ({ from: s[0], to: s[1], name: s[5] })),
+  log: D.log.map(e => ({ ...e, beat: e.beat - START })), levels: D.levels });
+</script></body></html>

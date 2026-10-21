@@ -1,0 +1,109 @@
+<!doctype html>
+<!-- Motion check for the Dancer visual. Run it with: node tests/motion-check.mjs
+     It drives the real dancer code in virtual time at 120 BPM (no audio, no screen), measures each
+     move, and writes the numbers as JSON into #out for the runner to grade. -->
+<html><body><pre id="out">running</pre>
+<script src="../registry.js"></script>
+<script src="../visuals/dancer.js"></script>
+<script>
+const D = MRD.dancer, draw = MRD.visuals[0].draw;
+const cv = document.createElement('canvas'); cv.width = 100; cv.height = 125;
+const ctx = cv.getContext('2d');
+let vt = 1000;
+performance.now = () => vt;                       // virtual clock: 60 frames per second exactly
+Math.random = (() => { let x = 12345; return () => (x = (x * 1103515245 + 12345) % 2147483648) / 2147483648; })();
+const state = { bass: .5, mid: .4, treble: .3, level: .3, beat: 0, onset: false, hue: 200,
+  subBass: .5, high: .3, snap: .2, clarity: 1, intensity: .7, relLevel: .7, punch: .5, locked: true, onsetCount: 0, bpm: 120, period: 500, phase: 0, tick: false, beatCount: 100 };
+const api = { ctx, W: 100, H: 125, state, fade: () => ctx.clearRect(0, 0, 100, 125) };
+let lastIdx = Math.floor(vt / 500);
+function step() {
+  vt += 1000 / 60;
+  const beats = vt / 500, idx = Math.floor(beats);
+  state.tick = idx > lastIdx; if (state.tick) state.beatCount++;
+  lastIdx = idx; state.phase = beats - idx;
+  draw(api);
+}
+const JOINTS = J => [J.hipL, J.hipR, J.kneeL, J.kneeR, J.footL, J.footR, J.shL, J.shR, J.head,
+  J.armL.elbow, J.armL.wrist, J.armR.elbow, J.armR.wrist, J.pelvis, J.chest];
+function simulate(names, beats, leadScale) {
+  D.leadScale = leadScale; D.pin(...names);
+  for (let i = 0; i < 480; i++) step();           // settle for 8 beats
+  const frames = [];
+  for (let i = 0; i < beats * 30; i++) {
+    step(); const J = D.pose;
+    frames.push({ t: vt, pts: JOINTS(J).map(p => [p[0], p[1]]), fL: [...J.footL], fR: [...J.footR],
+      pelvis: [...J.pelvis], chest: [...J.chest], over: Math.max(J.over[0], J.over[1]) });
+  }
+  return frames;
+}
+// Kinematic beats: prominent local minima of the mean joint speed (the body "stopping").
+function timing(frames) {
+  const n = frames.length, v = new Array(n).fill(0);
+  for (let t = 1; t < n; t++) {
+    let s = 0;
+    for (let j = 0; j < frames[t].pts.length; j++)
+      s += Math.hypot(frames[t].pts[j][0] - frames[t - 1].pts[j][0], frames[t].pts[j][1] - frames[t - 1].pts[j][1]);
+    v[t] = (s / frames[t].pts.length) * 60;
+  }
+  const vs = v.map((x, i) => i && i < n - 1 ? (v[i - 1] + x + v[i + 1]) / 3 : x);
+  const mean = vs.reduce((a, b) => a + b, 0) / n, minima = [];
+  for (let t = 8; t < n - 8; t++) {
+    if (!(vs[t] < vs[t - 1] && vs[t] <= vs[t + 1] && vs[t] < 0.9 * mean)) continue;
+    const left = Math.max(...vs.slice(t - 8, t)), right = Math.max(...vs.slice(t + 1, t + 9));
+    if (Math.min(left, right) - vs[t] > 0.3 * mean) minima.push(frames[t].t);   // flat holds don't count
+  }
+  const beats = [];
+  for (let b = Math.ceil(frames[0].t / 500) * 500; b <= frames[n - 1].t; b += 500) beats.push(b);
+  const near = (x, arr) => Math.min(...arr.map(y => Math.abs(x - y)));
+  const bas = minima.length ? minima.reduce((a, t) => a + Math.exp(-Math.pow(near(t, beats), 2) / (2 * 50 * 50)), 0) / minima.length : 0;
+  const hit = beats.filter(b => minima.some(t => Math.abs(t - b) <= 50)).length / beats.length;
+  const eighth = minima.length ? minima.filter(t => { const r = ((t % 250) + 250) % 250; return Math.min(r, 250 - r) <= 50; }).length / minima.length : 0;
+  return { bas, hit, eighth, stops: minima.length / beats.length };
+}
+// Physical plausibility: foot sliding, centre of mass over the feet, legs stretched past their reach.
+function physics(frames) {
+  const slides = []; let contact = 0, comOut = 0, over = 0;
+  for (let t = 1; t < frames.length; t++) {
+    const f = frames[t], p = frames[t - 1];
+    for (const k of ['fL', 'fR']) if (f[k][1] < 0.006 && p[k][1] < 0.006) slides.push(Math.abs(f[k][0] - p[k][0]) * 60);
+    const feet = [f.fL, f.fR].filter(x => x[1] < 0.006);
+    if (feet.length) {
+      contact++;
+      const lo = Math.min(...feet.map(x => x[0])) - 0.035, hi = Math.max(...feet.map(x => x[0])) + 0.035;
+      const com = 0.6 * f.pelvis[0] + 0.4 * f.chest[0];
+      if (com < lo || com > hi) comOut++;
+    }
+    if (f.over > 0.003) over++;
+  }
+  slides.sort((a, b) => a - b);
+  return { slide: slides.length ? slides[Math.floor(slides.length * 0.95)] : 0, contact: contact / frames.length,
+    comOut: contact ? comOut / contact : 0, over: over / frames.length };
+}
+const runs = [];
+D.lower.forEach(n => runs.push({ part: 'lower', name: n, names: [n, 'swing'] }));
+D.upper.forEach(n => runs.push({ part: 'upper', name: n, names: ['bounce', n] }));
+const results = runs.map(r => ({ part: r.part, name: r.name, ...timing(simulate(r.names, 16, 1)), ...physics(simulate(r.names, 16, 1)) }));
+const sweep = [0, 0.5, 0.8, 1, 1.2, 1.5].map(scale => {
+  let bas = 0, hit = 0;
+  for (const r of runs) { const m = timing(simulate(r.names, 8, scale)); bas += m.bas; hit += m.hit; }
+  return { scale, bas: bas / runs.length, hit: hit / runs.length };
+});
+// Transitions: settle on one lower-body move, switch to another (a two-beat crossfade, as the choreography does),
+// and measure the four beats after the switch. Steady-state checks can't see foot drift while stances blend.
+const transitions = [];
+for (const a of D.lower) for (const b of D.lower) {
+  if (a === b) continue;
+  D.leadScale = 1; D.pin(a, 'swing');
+  for (let i = 0; i < 480; i++) step();
+  D.pin(b);
+  const frames = [];
+  for (let i = 0; i < 120; i++) {
+    step(); const J = D.pose;
+    frames.push({ t: vt, pts: [], fL: [...J.footL], fR: [...J.footR], pelvis: [...J.pelvis], chest: [...J.chest],
+      over: Math.max(J.over[0], J.over[1]) });
+  }
+  const p = physics(frames);
+  transitions.push({ from: a, to: b, allowed: D.compatible(a, b), slide: p.slide, comOut: p.comOut, over: p.over });
+}
+document.getElementById('out').textContent = JSON.stringify({ results, sweep, transitions });
+</script></body></html>
