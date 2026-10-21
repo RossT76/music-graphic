@@ -188,7 +188,7 @@
     { name: 'swing', level: 0, snap: 1, f: (b, A) => {
       const L = popEvery(b, 2, 0, 5), R = popEvery(b, 2, 1, 5);
       return ch({ ...nod(b, A),
-        aL0: 16 + 9 * A * L, aL1: 45 + 12 * A * L, aR0: 16 + 9 * A * R, aR1: 45 + 12 * A * R });
+        aL0: 16 + 20 * A * L, aL1: 45 + 26 * A * L, aR0: 16 + 20 * A * R, aR1: 45 + 26 * A * R });
     } },
 
     // Shoulders hit alternately on the beat, with a pop on the "and"; the arms hang and follow a little.
@@ -196,7 +196,7 @@
       const L = popEvery(b, 2, 0, 6), R = popEvery(b, 2, 1, 6);
       return ch({ ...nod(b, A),
         roll: 0.022 * A * (L - R), shrug: 0.02 * A * pop(b, 0.5, 6),
-        aL0: 14 + 6 * A * L, aL1: 35 + 8 * A * L, aR0: 14 + 6 * A * R, aR1: 35 + 8 * A * R });
+        aL0: 14 + 18 * A * L, aL1: 35 + 24 * A * L, aR0: 14 + 18 * A * R, aR1: 35 + 24 * A * R });
     } },
 
     // The chest pops on the backbeat (beats 2 and 4): a quick push, a slow settle.
@@ -204,7 +204,7 @@
       const back = pop(b / 2, 0.5, 7);       // hits at b = 1, 3, 5...
       return ch({ ...nod(b, A), nod: -0.02 * A * back,
         chest: 0.045 * A * back, widen: 0.05 * A * back, shrug: 0.02 * A * back,
-        aL0: 15 + 6 * A * back, aL1: 40 + 9 * A * back, aR0: 15 + 6 * A * back, aR1: 40 + 9 * A * back });
+        aL0: 15 + 13 * A * back, aL1: 40 + 20 * A * back, aR0: 15 + 13 * A * back, aR1: 40 + 20 * A * back });
     } },
 
     // House "jack": a pulse that travels up the body on every beat - pelvis (the lower body's dip), then chest,
@@ -215,26 +215,26 @@
       shrug: 0.03 * A * frac(b),
       chest: 0.04 * A * bump(b - 0.125), widen: 0.04 * A * bump(b - 0.125),
       nod: -0.022 * A * bump(b - 0.25), tilt: 4 * A * sn(b, 4),
-      aL0: 22 + 11 * A * pop(b, 0, 6), aL1: 25 + 16 * A * pop(b, 0, 6),
-      aR0: 22 + 11 * A * pop(b, 0, 6), aR1: 25 + 16 * A * pop(b, 0, 6) }) },
+      aL0: 22 + 15 * A * pop(b, 0, 6), aL1: 25 + 22 * A * pop(b, 0, 6),
+      aR0: 22 + 15 * A * pop(b, 0, 6), aR1: 25 + 22 * A * pop(b, 0, 6) }) },
 
     // Arms held a little out from the body, hit on the "and" - the left on the "and" of 1, the right on the "and" of 2.
     { name: 'arm hits', level: 1, sync: true, snap: 1.1, f: (b, A) => {
       const L = popEvery(b, 2, 0.5, 6), R = popEvery(b, 2, 1.5, 6);
       return ch({ ...nod(b, A), roll: 0.012 * A * (L - R),
-        aL0: 38 + 16 * A * L, aL1: 70 + 16 * A * L, aR0: 38 + 16 * A * R, aR1: 70 + 16 * A * R });
+        aL0: 38 + 35 * A * L, aL1: 70 + 35 * A * L, aR0: 38 + 35 * A * R, aR1: 70 + 35 * A * R });
     } },
 
     // One hand up, over the head, bouncing on the beat while the other arm hangs: "this is my song".
     { name: 'one hand up', level: 2, snap: 1, f: (b, A) => ch({ ...nod(b, A),
-      aR0: 150 + 7 * A * pop(b, 0, 5), aR1: 165 + 9 * A * pop(b, 0, 5),
-      aL0: 16 + 8 * A * popEvery(b, 2, 0, 5), aL1: 50 + 10 * A * popEvery(b, 2, 0, 5) }) },
+      aR0: 150 + 15 * A * pop(b, 0, 5), aR1: 165 + 20 * A * pop(b, 0, 5),
+      aL0: 16 + 18 * A * popEvery(b, 2, 0, 5), aL1: 50 + 22 * A * popEvery(b, 2, 0, 5) }) },
 
     // Both hands up, taking a small hit on each beat in turn (left on the even beats, right on the odd).
     { name: 'hands up', level: 2, snap: 1, f: (b, A) => {
       const L = popEvery(b, 2, 0, 5), R = popEvery(b, 2, 1, 5);
       return ch({ ...nod(b, A), lean: 3 * A * (L - R), tilt: 5 * A * (L - R),
-        aL0: 155 + 8 * A * L, aL1: 165 + 8 * A * L, aR0: 155 + 8 * A * R, aR1: 165 + 8 * A * R });
+        aL0: 155 + 26 * A * L, aL1: 165 + 26 * A * L, aR0: 155 + 26 * A * R, aR1: 165 + 26 * A * R });
     } },
   ];
 
