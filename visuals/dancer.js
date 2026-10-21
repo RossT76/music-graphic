@@ -7,8 +7,9 @@
 //      upper body (torso, arms, head): expressive gestures.
 //    Each layer has its own moves, and the choreography (below) combines them, so lower x upper
 //    pairings give lots of variety.
-//  - A move is a function of the beat position: weight shifts, bounces and arm swings are
-//    sine waves, so motion flows. Amplitude follows how loud the music is. Moves are timed so
+//  - A move is a function of the beat position: weight shifts and bounces are smooth
+//    curves, but the arms and shoulders take discrete hits on the beat or the "and" and settle between them,
+//    like a real dancer's accents. Amplitude follows how loud the music is. Moves are timed so
 //    the body stops (a "kinematic beat") on the beat.
 //  - The torso counter-leans and the shoulders counter-tilt against the hips automatically.
 //  - Every joint chases its value through a stiff spring. Feet stay planted: knees are solved
@@ -59,6 +60,8 @@
   // A pop: a hit at `at` (in beats, so 0.5 is the "and"), then a settle. Real groove loads energy
   // unevenly - a quick attack and a slow recovery - and lives on the off-beats as much as the beats.
   const pop = (b, at = 0, k = 5) => Math.exp(-k * frac(b - at));
+  // The same hit repeating every n beats (n = 2 alternates left and right on successive beats).
+  const popEvery = (b, n, at = 0, k = 5) => Math.exp(-k * frac((b - at) / n) * n);
   // One leap (a jump or hop) per beat, as a sequence for the legs, with u = position in the beat:
   //   u 0     landing, deepest crouch (the knees have absorbed the impact - this is the stop on the beat)
   //   u 0.25  the legs have pushed straight and the feet leave the floor
@@ -178,49 +181,60 @@
   // The head nods on the beat in nearly everything: it is what makes a body look like it is listening.
   const nod = (b, A) => ({ nod: -0.012 * A * bump(b), tilt: 5 * A * sn(b, 4) });
 
+  // The arms do not wave continuously. They hang, take a hit on a beat (quarter) or on the "and" (eighth), and
+  // settle: `popEvery` gives the hit-and-settle, and the gaps between hits are still.
   const UPPER = [
-    { name: 'swing', level: 0, snap: 1, f: (b, A) => ch({ ...nod(b, A),
-      aL0: 18 + 14 * A * cs(b, 2), aL1: 55 + 14 * A * cs(b, 2),
-      aR0: 18 - 14 * A * cs(b, 2), aR1: 55 - 14 * A * cs(b, 2) }) },
+    // Loose arms: the left arm takes a small hit on the even beats, the right on the odd, and settles between.
+    { name: 'swing', level: 0, snap: 1, f: (b, A) => {
+      const L = popEvery(b, 2, 0, 5), R = popEvery(b, 2, 1, 5);
+      return ch({ ...nod(b, A),
+        aL0: 16 + 9 * A * L, aL1: 45 + 12 * A * L, aR0: 16 + 9 * A * R, aR1: 45 + 12 * A * R });
+    } },
 
-    // Shoulders alternate up and down with a little pop on the "and"; the arms hang loose.
-    { name: 'shoulders', level: 0, sync: true, snap: 1, f: (b, A) => ch({ ...nod(b, A),
-      roll: 0.025 * A * cs(b, 2), shrug: 0.025 * A * pop(b, 0.5, 6),
-      aL0: 15 + 6 * A * cs(b, 2), aL1: 35 + 8 * A * cs(b, 2), aR0: 15 - 6 * A * cs(b, 2), aR1: 35 - 8 * A * cs(b, 2) }) },
+    // Shoulders hit alternately on the beat, with a pop on the "and"; the arms hang and follow a little.
+    { name: 'shoulders', level: 0, sync: true, snap: 1, f: (b, A) => {
+      const L = popEvery(b, 2, 0, 6), R = popEvery(b, 2, 1, 6);
+      return ch({ ...nod(b, A),
+        roll: 0.022 * A * (L - R), shrug: 0.02 * A * pop(b, 0.5, 6),
+        aL0: 14 + 6 * A * L, aL1: 35 + 8 * A * L, aR0: 14 + 6 * A * R, aR1: 35 + 8 * A * R });
+    } },
 
     // The chest pops on the backbeat (beats 2 and 4): a quick push, a slow settle.
     { name: 'chest pop', level: 1, sync: true, snap: 1.2, f: (b, A) => {
       const back = pop(b / 2, 0.5, 7);       // hits at b = 1, 3, 5...
       return ch({ ...nod(b, A), nod: -0.02 * A * back,
         chest: 0.045 * A * back, widen: 0.05 * A * back, shrug: 0.02 * A * back,
-        aL0: 15 + 10 * A * back, aL1: 40 + 14 * A * back, aR0: 15 + 10 * A * back, aR1: 40 + 14 * A * back });
+        aL0: 15 + 6 * A * back, aL1: 40 + 9 * A * back, aR0: 15 + 6 * A * back, aR1: 40 + 9 * A * back });
     } },
 
     // House "jack": a pulse that travels up the body on every beat - pelvis (the lower body's dip), then chest,
     // then head, each an eighth of a beat later. From the front the chest push is shown with depth cues: the
     // torso lengthens and the shoulders widen a little as the chest comes forward, and the collarbones rise
-    // slowly through the beat and snap down on it.
+    // slowly through the beat and snap down on it. The arms get one hit per beat.
     { name: 'jack ripple', level: 1, snap: 1.1, f: (b, A) => ch({
       shrug: 0.03 * A * frac(b),
       chest: 0.04 * A * bump(b - 0.125), widen: 0.04 * A * bump(b - 0.125),
       nod: -0.022 * A * bump(b - 0.25), tilt: 4 * A * sn(b, 4),
-      aL0: 25 + 22 * A * bump(b), aL1: 20 + 30 * A * bump(b),
-      aR0: 25 + 22 * A * bump(b), aR1: 20 + 30 * A * bump(b) }) },
+      aL0: 22 + 11 * A * pop(b, 0, 6), aL1: 25 + 16 * A * pop(b, 0, 6),
+      aR0: 22 + 11 * A * pop(b, 0, 6), aR1: 25 + 16 * A * pop(b, 0, 6) }) },
 
-    { name: 'wave', level: 1, snap: 1, f: (b, A) => ch({ ...nod(b, A), roll: 0.02 * A * cs(b, 2),
-      aL0: 70 + 25 * A * cs(b, 2), aL1: 90 + 40 * A * cs(b, 2),
-      aR0: 70 + 25 * A * cs(b, 2, 0.5), aR1: 90 + 40 * A * cs(b, 2, 0.5) }) },
+    // Arms held a little out from the body, hit on the "and" - the left on the "and" of 1, the right on the "and" of 2.
+    { name: 'arm hits', level: 1, sync: true, snap: 1.1, f: (b, A) => {
+      const L = popEvery(b, 2, 0.5, 6), R = popEvery(b, 2, 1.5, 6);
+      return ch({ ...nod(b, A), roll: 0.012 * A * (L - R),
+        aL0: 38 + 16 * A * L, aL1: 70 + 16 * A * L, aR0: 38 + 16 * A * R, aR1: 70 + 16 * A * R });
+    } },
 
-    // One hand up, waving over the head, while the other arm hangs loose and swings: "this is my song".
+    // One hand up, over the head, bouncing on the beat while the other arm hangs: "this is my song".
     { name: 'one hand up', level: 2, snap: 1, f: (b, A) => ch({ ...nod(b, A),
-      aR0: 150 + 14 * A * cs(b, 2), aR1: 165 + 22 * A * cs(b, 2),
-      aL0: 18 + 12 * A * cs(b, 2), aL1: 55 + 12 * A * cs(b, 2) }) },
+      aR0: 150 + 7 * A * pop(b, 0, 5), aR1: 165 + 9 * A * pop(b, 0, 5),
+      aL0: 16 + 8 * A * popEvery(b, 2, 0, 5), aL1: 50 + 10 * A * popEvery(b, 2, 0, 5) }) },
 
+    // Both hands up, taking a small hit on each beat in turn (left on the even beats, right on the odd).
     { name: 'hands up', level: 2, snap: 1, f: (b, A) => {
-      const s = cs(b, 2);
-      return ch({ ...nod(b, A), lean: 5 * A * s, tilt: 8 * A * s,
-        aL0: 160 - 16 * A * s, aL1: 168 - 14 * A * s,
-        aR0: 160 + 16 * A * s, aR1: 168 + 14 * A * s });
+      const L = popEvery(b, 2, 0, 5), R = popEvery(b, 2, 1, 5);
+      return ch({ ...nod(b, A), lean: 3 * A * (L - R), tilt: 5 * A * (L - R),
+        aL0: 155 + 8 * A * L, aL1: 165 + 8 * A * L, aR0: 155 + 8 * A * R, aR1: 165 + 8 * A * R });
     } },
   ];
 
@@ -431,8 +445,9 @@
   function skeleton(t, state) {
     const v = k => spring[k].x;
     const dipMod = (0.005 + 0.025 * state.subBass) * bump(state.phase) + 0.015 * accent; // extra dip on the beat and on hits
-    const swing = state.mid * 10 * Math.sin(TAU * state.phase * 2);
-    const flick = state.high * 35 * Math.sin(t * 0.03);
+    // Real drum hits kick the arms a little, then they settle (nothing wiggles continuously).
+    const swing = 6 * accent * accentSign;
+    const flick = 4 * state.high * accent * accentSign;
     const hipX = v('sway');
     const tiltY = v('hipTilt');
     const feetY = [v('liftL') + jump.y * 1.5, v('liftR') + jump.y * 1.5];
