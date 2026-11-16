@@ -4,10 +4,9 @@
   const TAU = Math.PI * 2;
 
   function draw(api) {
-    const { ctx, W, H, state, fade, spec } = api;
+    const { ctx, W, H, state, fade, spec, time } = api;
     fade(0.14);
     const R = Math.min(W, H) * 0.5, seg = 10;
-    const time = performance.now() / 1000;
     ctx.save();
     ctx.translate(W / 2, H / 2);
     ctx.rotate(time * 0.15 + state.bass * 0.4);
@@ -34,5 +33,5 @@
     ctx.restore();
   }
 
-  MRD.register({ name: 'Kaleidoscope', draw });
+  MRD.register({ name: 'Kaleidoscope', draw, motion: true, reverseLabel: 'Spins and flows the other way' });
 })();

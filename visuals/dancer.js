@@ -694,5 +694,19 @@
     }
   }
 
-  MRD.register({ name: 'Dancer', draw });
+  // Read-only details for the controls page's debug panel (see registry.js). Changes nothing.
+  function debugRows() {
+    const next = choreo.plan[0];
+    return [
+      ['State', rest > 0.5 ? 'resting' : 'dancing'],
+      ['Moves', MRD.dancer.label || '-'],
+      ['Mood', choreo.mood],
+      ['Phrase beat', `${phraseBeat(MRD.state.beatCount) + 1} / ${PHRASE}`],
+      ['Next phrase', next ? `${next.lower.name} + ${next.upper.name}` : '(planning)'],
+      ['Cadenced moves', clarity > 0.4 ? 'allowed (clarity > 0.4)' : 'held back (clarity 0.4 or less)'],
+      ['Moves pinned', pinned ? 'yes (?move=)' : 'no'],
+    ];
+  }
+
+  MRD.register({ name: 'Dancer', draw, debug: debugRows });
 })();

@@ -6,10 +6,9 @@
   const goo = document.createElement('canvas');
   const gooCtx = goo.getContext('2d');
   function draw(api) {
-    const { ctx, W, H, state, spec, clearStage } = api;
+    const { ctx, W, H, state, spec, clearStage, time: t } = api;
     const w = Math.ceil(W / 2), h = Math.ceil(H / 2);
     if (goo.width !== w || goo.height !== h) { goo.width = w; goo.height = h; }
-    const t = performance.now() / 1000;
     gooCtx.fillStyle = '#000';
     gooCtx.fillRect(0, 0, w, h);
     for (let i = 0; i < 9; i++) {
@@ -29,5 +28,5 @@
     ctx.globalCompositeOperation = 'source-over';
   }
 
-  MRD.register({ name: 'Goo', draw });
+  MRD.register({ name: 'Goo', draw, motion: true, reverseLabel: 'Blobs drift the other way' });
 })();

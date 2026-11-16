@@ -12,6 +12,7 @@
   let wave = null;   // Uint8Array, time-domain samples 0-255
   let micSource = null;
   let micStream = null;
+  let statusFull = true;   // set when the device list changes, so the next status report to the controls includes it
 
   function ensureAudio() {
     if (audioCtx) {
@@ -69,6 +70,7 @@
   // Labels are blank until the user has granted permission once.
   async function refreshDevices(selectedId) {
     const devices = await navigator.mediaDevices.enumerateDevices();
+    statusFull = true;
     const inputs = devices.filter(d => d.kind === 'audioinput');
     const wanted = selectedId || deviceSelect.value || recall('deviceId') || '';
     const track = micStream && micStream.getAudioTracks()[0];
@@ -92,7 +94,14 @@
     if (named.some(d => d.deviceId === wanted)) deviceSelect.value = wanted;
   }
 
-  async function startMic(deviceId) {
+  // Starts are queued, so a second request (such as a device change from the controls) never overlaps the first.
+  let micQueue = Promise.resolve();
+  function startMic(deviceId) {
+    micQueue = micQueue.then(() => startMicNow(deviceId), () => startMicNow(deviceId));
+    return micQueue;
+  }
+
+  async function startMicNow(deviceId) {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       notify('Audio input needs a secure page. Open this page via http://localhost, ' +
              'https://, or file:// (plain http:// to a network address is blocked by the browser).');
@@ -356,8 +365,10 @@
   // ?bg=black|green|transparent
   // ?visual=<name>
   // ?device=<part of an input's name>   (picked automatically in clean mode)
+  // ?output           clean, and controlled from controls.html through the server (see "Remote control" below)
   const params = new URLSearchParams(location.search);
-  const clean = params.has('clean');
+  const sync = params.has('output');
+  const clean = params.has('clean') || sync;
   const BACKGROUNDS = {
     black: { rgb: '0,0,0' },
     green: { rgb: '0,255,0' },
@@ -377,6 +388,50 @@
     clearStage();
   }
   bgSelect.addEventListener('change', () => setBackground(bgSelect.value));
+
+  // ---------- Motion: speed and direction ----------
+  // Visuals registered with `motion: true` run on the flow clock (api.time / api.flow, see registry.js),
+  // which these two controls scale and reverse. Other visuals ignore them, and the controls dim.
+  // ?speed=<0.25-3>   ?reverse
+  const SPEED_MIN = 0.25, SPEED_MAX = 3;
+  const motionGroup = document.getElementById('motion');
+  const speedInput = document.getElementById('speed');
+  const speedLabel = document.getElementById('speedval');
+  const reverseBtn = document.getElementById('reverse');
+  // log = log2 of the speed multiplier, so the slider feels even. blend is the direction visuals actually
+  // move at: normally the same as dir, but an automatic flip eases it through zero (see frame) instead of snapping.
+  const motion = { log: 0, dir: 1, time: 0, blend: 1, smooth: false };
+  MRD.motion = motion;   // exposed for debugging in the browser console
+
+  // Auto reverse: flips the direction every `every` beats of the beat clock while music plays (set from the
+  // controls page). `since` is the beat it last flipped, or was switched on, or the direction last changed by hand.
+  const auto = { on: false, every: 32, since: 0 };
+
+  const parseSpeed = v => {
+    const s = parseFloat(v);
+    return s > 0 ? Math.min(SPEED_MAX, Math.max(SPEED_MIN, s)) : null;
+  };
+
+  function setMotion(log, dir, smooth = false) {
+    motion.log = Math.max(Math.log2(SPEED_MIN), Math.min(Math.log2(SPEED_MAX), log));
+    if (dir !== motion.dir && !smooth) auto.since = state.beatCount;   // a change by hand restarts the countdown
+    motion.dir = dir;
+    motion.smooth = smooth;
+    if (!smooth) motion.blend = dir;
+    const speed = Math.pow(2, motion.log);
+    speedInput.value = motion.log;
+    speedLabel.textContent = speed.toFixed(2) + '×';
+    reverseBtn.classList.toggle('active', dir < 0);
+    reverseBtn.setAttribute('aria-pressed', dir < 0);
+    store('speed', speed.toFixed(3));
+    store('reverse', dir < 0 ? '1' : '0');
+  }
+  speedInput.addEventListener('input', () => setMotion(Number(speedInput.value), motion.dir));
+  speedInput.addEventListener('dblclick', () => setMotion(0, motion.dir));
+  reverseBtn.addEventListener('click', () => setMotion(motion.log, -motion.dir));
+  setMotion(
+    Math.log2(parseSpeed(params.get('speed')) ?? parseSpeed(recall('speed')) ?? 1),
+    (params.has('reverse') ? params.get('reverse') !== '0' : recall('reverse') === '1') ? -1 : 1);
 
   // ---------- Rendering ----------
   let W = 0, H = 0, dpr = 1;
@@ -433,10 +488,13 @@
 
   // Everything a visual may use (documented in registry.js). Values that change
   // over time are refreshed every frame before draw() is called.
-  const api = { ctx, state, fade, clearStage, spec, W: 0, H: 0, freq: null, wave: null, bgRgb: null };
+  const api = {
+    ctx, state, fade, clearStage, spec, W: 0, H: 0, freq: null, wave: null, bgRgb: null,
+    dt: 1 / 60, speed: 1, dir: 1, time: 0, flow: 0,
+  };
 
   // Visuals live in visuals/*.js and register themselves with MRD.register()
-  // (see registry.js), in the order their <script> tags appear in index.html.
+  // (see registry.js), in the order their <script> tags appear in display.html.
   const VISUALS = MRD.visuals;
   const visualSelect = document.getElementById('visual');
   let current = 0;
@@ -457,15 +515,40 @@
     current = (i + VISUALS.length) % VISUALS.length;
     visualSelect.value = current;
     store('visual', VISUALS[current].name);
+    motionGroup.classList.toggle('off', !VISUALS[current].motion);
     clearStage();
   }
   visualSelect.addEventListener('change', () => setVisual(Number(visualSelect.value)));
   document.getElementById('prev').addEventListener('click', () => setVisual(current - 1));
   document.getElementById('next').addEventListener('click', () => setVisual(current + 1));
 
+  let lastFrame = 0;
+  let fps = 60;   // measured frame rate (smoothed), for the debug panel
   function frame(now) {
     analyse(now);
     trackTempo(now);
+    // Real seconds since the last frame (capped, so a hidden tab doesn't cause a jump), then the same
+    // step scaled by speed and direction. flow is that step in 60 Hz frames, for per-frame constants.
+    const dt = Math.min(0.05, (now - lastFrame) / 1000) || 1 / 60;
+    if (lastFrame && now > lastFrame) fps += (1000 / (now - lastFrame) - fps) * 0.05;
+    lastFrame = now;
+    if (auto.on && state.tick && VISUALS[current].motion && state.intensity > 0.05 && state.beatCount - auto.since >= auto.every) {
+      auto.since = state.beatCount;
+      setMotion(motion.log, -motion.dir, true);
+      if (sync) post('/api/state', { reverse: motion.dir < 0 });   // so the controls page's Reverse button follows
+    }
+    if (motion.smooth) {   // a full swing from forward to reverse takes half a second
+      const step = dt * 4;
+      motion.blend += Math.max(-step, Math.min(step, motion.dir - motion.blend));
+      if (motion.blend === motion.dir) motion.smooth = false;
+    }
+    const speed = Math.pow(2, motion.log);
+    motion.time += dt * speed * motion.blend;
+    api.dt = dt;
+    api.speed = speed;
+    api.dir = motion.dir;
+    api.time = motion.time;
+    api.flow = dt * 60 * speed * motion.blend;
     api.W = W;
     api.H = H;
     api.freq = freq;
@@ -492,7 +575,10 @@
     const q = new URLSearchParams({ clean: '', visual: VISUALS[current].name.toLowerCase(), bg });
     const opt = deviceSelect.selectedOptions[0];
     if (micStream && opt && opt.value) q.set('device', opt.textContent);
-    const url = location.origin + location.pathname + '?' + q.toString().replace('clean=', 'clean');
+    if (motion.log !== 0) q.set('speed', Math.pow(2, motion.log).toFixed(2));
+    if (motion.dir < 0) q.set('reverse', '');
+    const url = location.origin + location.pathname + '?' +
+      q.toString().replace('clean=', 'clean').replace('reverse=', 'reverse');
     const btn = e.currentTarget;
     try {
       await navigator.clipboard.writeText(url);
@@ -504,6 +590,7 @@
   });
 
   window.addEventListener('keydown', e => {
+    if (sync) return;   // the output is controlled from the controls page only, so the two can't disagree
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
     if (e.key === 'ArrowRight') setVisual(current + 1);
     else if (e.key === 'ArrowLeft') setVisual(current - 1);
@@ -512,6 +599,11 @@
       setBackground(names[(names.indexOf(bg) + 1) % names.length]);
     }
     else if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+    else if (e.ctrlKey || e.metaKey || e.altKey) return;
+    else if (e.key === '[') setMotion(motion.log - 0.25, motion.dir);
+    else if (e.key === ']') setMotion(motion.log + 0.25, motion.dir);
+    else if (e.key === 'r' || e.key === 'R') setMotion(motion.log, -motion.dir);
+    else if (e.key === '0') setMotion(0, 1);
   });
 
   let idleTimer;
@@ -529,12 +621,212 @@
 
   // In clean mode there is nobody to press Listen, so start straight away,
   // then switch to the input named in ?device= once the browser reveals names.
-  async function autostart() {
-    await startMic(recall('deviceId'));
+  // (preferredId: an input chosen on the controls page, which beats ?device= and the saved choice)
+  async function autostart(preferredId) {
+    await startMic(preferredId || recall('deviceId'));
     const wanted = (params.get('device') || '').toLowerCase();
-    if (!wanted || !micStream) return;
+    if (preferredId || !wanted || !micStream) return;
     const match = [...deviceSelect.options].find(o => o.textContent.toLowerCase().includes(wanted));
     if (match && match.value !== deviceSelect.value) await startMic(match.value);
   }
-  if (clean) autostart().catch(err => notify(err.message));
+
+  // ---------- Remote control (?output) ----------
+  // In output mode this page is driven from controls.html. serve.py relays the settings (an event stream
+  // down to here, plain POSTs back up) and passes on the status reported below. The server's settings win
+  // over URL parameters and saved choices; any setting the server has no value for is filled in from this
+  // page, so the controls start out showing what is really on screen. If there is no relay (a plain static
+  // server) the page just carries on with its own settings.
+  const log2 = Math.log2;
+  const round = (x, places) => Math.round(x * 10 ** places) / 10 ** places;
+
+  function post(path, body) {
+    return fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(() => {});   // the relay may be briefly unreachable; the next report will get through
+  }
+
+  const currentSettings = () => ({
+    visual: VISUALS[current].name,
+    bg,
+    speed: round(Math.pow(2, motion.log), 3),
+    reverse: motion.dir < 0,
+    auto: auto.on,
+    autoEvery: auto.every,
+    sens: Number(sensInput.value),
+    gate: Number(gateInput.value),
+    debug: debugOn,
+  });
+
+  let debugOn = false;   // set from the controls page; while on, status reports carry the details below
+
+  // What the controls page's debug panel shows: sections of [label, text, optional 0-1 bar].
+  function debugSnapshot() {
+    const n2 = v => v.toFixed(2);
+    const input = deviceSelect.selectedOptions[0];
+    const sections = [
+      {
+        title: 'Beat',
+        rows: [
+          ['Beat lock', state.locked ? 'YES' : 'no'],
+          ['Beats detected', String(state.onsetCount)],
+          ['Tempo', `${state.bpm.toFixed(1)} BPM`],
+          ['Beat clock', `beat ${state.beatCount}, ${Math.round(state.phase * 100)}% through`, state.phase],
+          ['Pulse clarity', n2(state.clarity), state.clarity],
+        ],
+      },
+      {
+        title: 'Levels',
+        rows: [
+          ['Loudness', n2(state.level), state.level],
+          ['Relative to peak', n2(state.relLevel), state.relLevel],
+          ['Recent average', n2(state.intensity), state.intensity],
+          ['Bass', n2(state.bass), state.bass],
+          ['Mid', n2(state.mid), state.mid],
+          ['Treble', n2(state.treble), state.treble],
+          ['Sub-bass (50-100 Hz)', n2(state.subBass), state.subBass],
+          ['Highs (6.4-12.8 kHz)', n2(state.high), state.high],
+          ['Punch', n2(state.punch), state.punch],
+          ['Snap', n2(state.snap), state.snap],
+        ],
+      },
+      {
+        title: 'Display',
+        rows: [
+          ['Visual', VISUALS[current].name],
+          ['Drawing', document.hidden ? 'paused (tab is in the background)' : `${fps.toFixed(0)} fps`],
+          ['Screen', `${W} × ${H} at ${dpr}×`],
+          ['Motion', `${Math.pow(2, motion.log).toFixed(2)}×, ${motion.dir < 0 ? 'reversed' : 'forward'}${VISUALS[current].motion ? '' : ' (not used by this visual)'}`],
+          ['Auto reverse', auto.on ? `every ${auto.every} beats, next flip in ${Math.max(0, auto.every - (state.beatCount - auto.since))}` : 'off'],
+          ['Background', bg],
+          ['Input', input ? input.textContent : '-'],
+          ['Audio', audioCtx ? `${audioCtx.state}, ${audioCtx.sampleRate} Hz` : 'not started'],
+        ],
+      },
+    ];
+    try {
+      const own = VISUALS[current].debug && VISUALS[current].debug();
+      if (own && own.length) sections.push({ title: VISUALS[current].name, rows: own });
+    } catch (e) {
+      sections.push({ title: VISUALS[current].name, rows: [['Debug details failed', String(e.message)]] });
+    }
+    return { sections };
+  }
+
+  let appliedDevice = null;   // the last input the controls asked for, so it is only acted on once
+  let listenStarted = false;
+
+  function applyRemote(s) {
+    const i = findVisual(s.visual);
+    if (i >= 0 && i !== current) setVisual(i);
+    if (Object.hasOwn(BACKGROUNDS, s.bg) && s.bg !== bg) setBackground(s.bg);
+    const speed = parseSpeed(s.speed) ?? Math.pow(2, motion.log);
+    const dir = typeof s.reverse === 'boolean' ? (s.reverse ? -1 : 1) : motion.dir;
+    if (round(speed, 3) !== round(Math.pow(2, motion.log), 3) || dir !== motion.dir) setMotion(log2(speed), dir);
+    for (const [key, input] of [['sens', sensInput], ['gate', gateInput]]) {
+      const v = Number(s[key]);
+      if (s[key] !== undefined && Number.isFinite(v) && v !== Number(input.value)) {
+        input.value = v;
+        store(key, input.value);
+      }
+    }
+    if (typeof s.auto === 'boolean' && s.auto !== auto.on) {
+      auto.on = s.auto;
+      auto.since = state.beatCount;   // the first flip comes a full interval after switching on
+    }
+    if (Number.isFinite(s.autoEvery) && s.autoEvery > 0) auto.every = s.autoEvery;
+    if (typeof s.debug === 'boolean') debugOn = s.debug;
+    if (s.device && s.device !== appliedDevice) {
+      appliedDevice = s.device;
+      // (Also when we are silent, even if the dropdown already shows this input: the request may be a retry.)
+      if (listenStarted && (s.device !== deviceSelect.value || !micStream)) switchInput(s.device);
+    }
+  }
+
+  // Switching stops the current input first, so if the new one can't be opened (it has gone, or the browser
+  // refuses) go back to the one that was working rather than leaving the display silent, and tell the server.
+  async function switchInput(id) {
+    const previous = deviceSelect.value;
+    try {
+      await startMic(id);
+      if (!micStream && previous) await startMic(previous);
+    } catch (err) {
+      notify(err.message);
+    }
+    appliedDevice = deviceSelect.value;
+    if (micStream && deviceSelect.value !== id) post('/api/state', { device: deviceSelect.value });
+  }
+
+  function startSync() {
+    let first = true;
+    const begin = state0 => {   // start listening once, on the input the controls chose if there is one
+      if (listenStarted) return;
+      listenStarted = true;
+      appliedDevice = state0.device || null;
+      autostart(state0.device)
+        .then(() => {
+          // The remembered input may no longer exist (device ids can change): fall back to our own choice.
+          if (!micStream && state0.device) return autostart();
+        })
+        .then(() => {
+          appliedDevice = deviceSelect.value;
+          if (deviceSelect.value && deviceSelect.value !== state0.device) post('/api/state', { device: deviceSelect.value });
+        })
+        .catch(err => notify(err.message));
+    };
+
+    const events = new EventSource('/api/events');
+    events.addEventListener('state', e => {
+      const s = JSON.parse(e.data);
+      if (first) {
+        first = false;
+        applyRemote(s);
+        const gaps = Object.fromEntries(Object.entries(currentSettings()).filter(([k]) => s[k] === undefined));
+        if (Object.keys(gaps).length) post('/api/state', gaps);
+        begin(s);
+      } else {
+        applyRemote(s);
+      }
+    });
+    setTimeout(() => begin({}), 3000);   // no relay answered: carry on alone
+
+    // What the controls page shows: whether we are listening, how loud, the tempo, and (every few
+    // seconds, or when it changes) which visuals and inputs there are to choose from.
+    // The beat comes from a worker, because browsers slow a hidden tab's own timers right down (to once a
+    // second, then once a minute), and a display left in a background tab should still show as running.
+    const everyEighthSecond = fn => {
+      try {
+        const script = URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 125)'], { type: 'text/javascript' }));
+        new Worker(script).onmessage = fn;
+      } catch (e) {
+        setInterval(fn, 125);
+      }
+    };
+    let ticks = 0, sending = false;
+    everyEighthSecond(async () => {
+      if (sending) return;
+      sending = true;
+      const report = {
+        listening: Boolean(micStream),
+        bpm: Math.round(state.bpm),
+        locked: state.locked,
+        level: round(state.relLevel, 2),
+        levels: [state.bass, state.mid, state.treble].map(v => round(v, 2)),
+        visual: VISUALS[current].name,
+        debug: debugOn ? debugSnapshot() : null,   // null also clears it on the controls page when switched off
+      };
+      if (statusFull || ++ticks % 40 === 0) {
+        statusFull = false;
+        report.catalog = VISUALS.map(v => ({ name: v.name, motion: Boolean(v.motion), reverseLabel: v.reverseLabel || '' }));
+        report.devices = [...deviceSelect.options].filter(o => o.value).map(o => ({ id: o.value, label: o.textContent }));
+        report.device = deviceSelect.value;
+      }
+      await post('/api/status', report);
+      sending = false;
+    });
+  }
+
+  if (sync) startSync();
+  else if (clean) autostart().catch(err => notify(err.message));
 })();

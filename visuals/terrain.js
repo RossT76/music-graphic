@@ -1,14 +1,16 @@
-// Synthwave landscape: past spectra scroll towards you as hills, under a bass-pulsing sun.
+// Synthwave landscape: the spectrum is laid down as a row of hills that recedes towards the horizon,
+// under a bass-pulsing sun. Reversed, new rows appear on the horizon and roll towards you.
 (() => {
   'use strict';
 
-  const terrain = { rows: [], last: 0 };
+  const ROW_RATE = 1000 / 70;   // new rows per second at 1x
+  const terrain = { rows: [], acc: 0 };   // acc: how far (0-1) the rows are towards the next one
   function draw(api) {
-    const { ctx, W, H, state, spec, clearStage, bgRgb } = api;
-    const now = performance.now();
+    const { ctx, W, H, state, spec, clearStage, bgRgb, dt, speed, dir } = api;
     const N = 64, ROWS = 34;
-    if (now - terrain.last > 70) {
-      terrain.last = now;
+    terrain.acc += dt * ROW_RATE * speed;
+    while (terrain.acc >= 1) {
+      terrain.acc -= 1;
       const row = new Float32Array(N);
       for (let i = 0; i < N; i++) {
         const fromCentre = Math.abs(i - (N - 1) / 2) / ((N - 1) / 2); // bass in the middle
@@ -25,8 +27,13 @@
     sun.addColorStop(1, 'hsla(0 0% 0% / 0)');
     ctx.fillStyle = sun;
     ctx.fillRect(0, 0, W, H);
-    for (let k = terrain.rows.length - 1; k >= 0; k--) { // oldest (far) first
-      const depth = Math.pow(1 - k / ROWS, 1.8);
+    // Row k is k rows old, plus the fraction of the way to the next one, so the scroll is smooth at any
+    // speed. Newest is nearest normally and farthest when reversed; draw far rows first either way.
+    const back = dir < 0, count = terrain.rows.length;
+    for (let j = 0; j < count; j++) {
+      const k = back ? j : count - 1 - j;
+      const age = (k + terrain.acc) / ROWS;
+      const depth = Math.pow(back ? age : 1 - age, 1.8);
       const y = horizon + (bottom - horizon) * depth;
       const halfW = W * (0.18 + 0.52 * depth);
       const amp = H * 0.28 * (0.25 + depth);
@@ -48,5 +55,5 @@
     }
   }
 
-  MRD.register({ name: 'Terrain', draw });
+  MRD.register({ name: 'Terrain', draw, motion: true, reverseLabel: 'Hills roll towards you' });
 })();

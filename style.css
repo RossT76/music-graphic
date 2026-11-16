@@ -96,3 +96,8 @@ select.btn option { color: #000; }
 
 .slider { display: flex; align-items: center; gap: 6px; font-size: 13px; opacity: 0.85; }
 .slider input { width: 80px; }
+.slider output { min-width: 3.4em; font-variant-numeric: tabular-nums; }
+
+/* Motion controls only apply to some visuals; dim them (but keep the setting) for the rest. */
+#motion.off { opacity: 0.35; }
+#motion.off .btn:hover { background: rgba(255, 255, 255, 0.08); }

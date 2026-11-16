@@ -5,11 +5,12 @@
 
   const tunnel = { z: 0, rot: 0 };
   function draw(api) {
-    const { ctx, W, H, state, fade, spec } = api;
+    const { ctx, W, H, state, fade, spec, flow } = api;
     fade(0.3);
     const cx = W / 2, cy = H / 2, maxR = Math.hypot(W, H) / 2;
-    tunnel.z = (tunnel.z + 0.004 + state.level * 0.03 + state.beat * 0.02) % 1;
-    tunnel.rot += 0.003 + state.mid * 0.03;
+    // flow is negative when reversed, so wrap both ways
+    tunnel.z = (((tunnel.z + (0.004 + state.level * 0.03 + state.beat * 0.02) * flow) % 1) + 1) % 1;
+    tunnel.rot += (0.003 + state.mid * 0.03) * flow;
     const rings = 20, sides = 6;
     ctx.globalCompositeOperation = 'lighter';
     for (let k = 0; k < rings; k++) {
@@ -29,5 +30,5 @@
     ctx.globalCompositeOperation = 'source-over';
   }
 
-  MRD.register({ name: 'Tunnel', draw });
+  MRD.register({ name: 'Tunnel', draw, motion: true, reverseLabel: 'Fly backwards out of the tunnel' });
 })();

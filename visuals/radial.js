@@ -3,7 +3,7 @@
   'use strict';
 
   function draw(api) {
-    const { ctx, W, H, state, fade, spec } = api;
+    const { ctx, W, H, state, fade, spec, time } = api;
     fade(0.18);
     const cx = W / 2, cy = H / 2;
     const base = Math.min(W, H) * (0.16 + state.beat * 0.04);
@@ -11,7 +11,7 @@
     ctx.lineWidth = Math.max(2, Math.min(W, H) / 220);
     ctx.lineCap = 'round';
     ctx.globalCompositeOperation = 'lighter';
-    const rot = performance.now() / 8000;
+    const rot = time / 8;
     for (let i = 0; i < n; i++) {
       // Mirror the spectrum around the circle so it is symmetrical.
       const half = i < n / 2 ? i : n - 1 - i;
@@ -36,5 +36,5 @@
     ctx.globalCompositeOperation = 'source-over';
   }
 
-  MRD.register({ name: 'Radial', draw });
+  MRD.register({ name: 'Radial', draw, motion: true, reverseLabel: 'Ring spins the other way' });
 })();

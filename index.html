@@ -4,77 +4,121 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Music Reactive Display</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="controls.css">
+  <!-- Links made before the controls lived here (index.html?clean&visual=..., index.html?output) still open the display. -->
+  <script>if (location.search) location.replace('display.html' + location.search + location.hash);</script>
 </head>
 <body>
-  <canvas id="stage"></canvas>
-
-  <div id="intro">
+  <header>
     <h1>Music Reactive Display</h1>
-    <p>Choose an audio input below and press Listen.</p>
-  </div>
-
-  <!-- Controls are grouped. To add a control, put it in the matching group (or add a new .group). -->
-  <div id="controls">
-    <div class="group" role="group" aria-label="Input">
-      <span class="caption">Input</span>
-      <div class="row">
-        <select id="device" aria-label="Audio input device" class="btn" title="Audio input device"><option value="">Press Listen to choose an input</option></select>
-        <button id="mic" class="btn">Listen</button>
+    <div class="head-right">
+      <div id="status" class="pill wait" role="status" aria-live="polite">
+        <span class="dot"></span><span id="statusText">Connecting&hellip;</span>
       </div>
+      <a id="opendisplay" class="btn primary" href="display.html?output" target="music-display"
+         title="Opens the display, which listens to the music and draws the visual. Drag the tab into its own window to put it on another screen.">Open display in another tab <span aria-hidden="true">&#8599;</span></a>
+    </div>
+    <p id="popupnote" class="note" role="alert" hidden>Your browser blocked the new tab. Allow pop-ups for this site and try again, or open the address under OBS below yourself.</p>
+  </header>
+
+  <main class="cols">
+    <div class="col">
+    <section>
+      <h2>Visual</h2>
+      <div id="visuals" class="tiles" role="group" aria-label="Visual">
+        <p class="note" id="waiting">The list appears once the display has been opened.</p>
+      </div>
+    </section>
     </div>
 
-    <div class="group" role="group" aria-label="Levels">
-      <span class="caption">Levels</span>
-      <div class="row">
-        <label class="slider" title="Sensitivity">Sens <input id="sens" type="range" min="0" max="100" value="50"></label>
-        <label class="slider" title="Noise gate: ignore sound quieter than this">Gate <input id="gate" type="range" min="0" max="60" value="0"></label>
+    <div class="col">
+    <section id="motion">
+      <h2>Motion</h2>
+      <div class="field">
+        <label for="speed">Speed</label>
+        <input id="speed" type="range" min="-2" max="1.585" step="0.01" value="0">
+        <output id="speedval" for="speed">1.00&times;</output>
+        <button id="speedreset" class="btn small" type="button">Reset</button>
       </div>
+      <button id="reverse" class="btn big" type="button" aria-pressed="false">
+        <span class="label">Reverse</span>
+        <small id="reversehint">&nbsp;</small>
+      </button>
+      <button id="auto" class="btn big" type="button" aria-pressed="false">
+        <span class="label">Auto reverse</span>
+        <small id="autohint">Flips the direction by itself while music is playing</small>
+      </button>
+      <div id="autorow" class="autorow" role="group" aria-label="How often to flip">
+        <span>Flip every</span>
+        <button class="btn small" type="button" data-beats="8">8</button>
+        <button class="btn small" type="button" data-beats="16">16</button>
+        <button class="btn small" type="button" data-beats="32">32</button>
+        <button class="btn small" type="button" data-beats="64">64</button>
+        <span>beats</span>
+      </div>
+      <p id="motionnote" class="note" hidden>This visual doesn&rsquo;t have speed or direction. Pick one of the moving ones to use these.</p>
+    </section>
+
+    <section>
+      <h2>Background</h2>
+      <div id="bg" class="seg" role="group" aria-label="Background">
+        <button class="btn" type="button" data-bg="black">Black</button>
+        <button class="btn" type="button" data-bg="green">Green screen</button>
+        <button class="btn" type="button" data-bg="transparent">Transparent</button>
+      </div>
+      <p class="note">Green screen is for chroma-keying in OBS. Transparent shows a checkerboard in a normal browser, and nothing behind the visual in OBS.</p>
+    </section>
     </div>
 
-    <div class="group" role="group" aria-label="Visual">
-      <span class="caption">Visual <small>(&larr; &rarr;)</small></span>
-      <div class="row">
-        <button id="prev" class="btn" aria-label="Previous visual">&lsaquo;</button>
-        <select id="visual" aria-label="Visual" class="btn"></select>
-        <button id="next" class="btn" aria-label="Next visual">&rsaquo;</button>
+    <div class="col">
+    <section>
+      <h2>Sound</h2>
+      <div class="field">
+        <label for="device">Input</label>
+        <select id="device" class="btn"><option value="">Waiting for the display&hellip;</option></select>
       </div>
+      <div class="field">
+        <label for="sens">Sensitivity</label>
+        <input id="sens" type="range" min="0" max="100" value="50">
+        <output id="sensval" for="sens">50</output>
+      </div>
+      <div class="field">
+        <label for="gate">Noise gate</label>
+        <input id="gate" type="range" min="0" max="60" value="0">
+        <output id="gateval" for="gate">0</output>
+      </div>
+      <p class="note">Sensitivity is how strongly the visual reacts. The noise gate ignores sound quieter than the setting, which stops hiss from moving things.</p>
+      <div class="meters" aria-label="What the display is hearing">
+        <div class="meter" id="m-level"><span>Level</span><i></i></div>
+        <div class="meter" id="m-bass"><span>Bass</span><i></i></div>
+        <div class="meter" id="m-mid"><span>Mid</span><i></i></div>
+        <div class="meter" id="m-treble"><span>Treble</span><i></i></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>OBS</h2>
+      <p class="note">To put the visual in OBS, add a <b>Browser Source</b> and paste this address. This page then controls it.</p>
+      <div class="field">
+        <input id="obsurl" class="url" type="text" readonly aria-label="Display page address">
+        <button id="copy" class="btn" type="button">Copy</button>
+      </div>
+    </section>
     </div>
 
-    <div class="group" role="group" aria-label="Display">
-      <span class="caption">Display <small>(B, F)</small></span>
-      <div class="row">
-        <select id="bg" aria-label="Background" class="btn" title="Background (B)">
-          <option value="black">Black</option>
-          <option value="green">Chroma green</option>
-          <option value="transparent">Transparent</option>
-        </select>
-        <button id="full" class="btn" title="Key F">Fullscreen</button>
-        <button id="obslink" class="btn" title="Copy a link for an OBS Browser Source">Copy OBS link</button>
+    <div class="col debugcol">
+    <section id="debug">
+      <div class="debughead">
+        <h2>Debug</h2>
+        <button id="debugtoggle" class="btn small" type="button" aria-pressed="false">Off</button>
+        <button id="debugcopy" class="btn small" type="button" hidden>Copy details</button>
       </div>
+      <p class="note" id="debughelp">Shows what the display is hearing and doing: beat lock and tempo, levels, frame rate, and details from the current visual. Turn it on when something doesn&rsquo;t look right. Nothing is drawn on the display itself.</p>
+      <div id="debugbody" class="dbg" hidden></div>
+    </section>
     </div>
+  </main>
 
-  </div>
-
-  <script src="registry.js"></script>
-  <!-- Visualisations: one file each, listed in control-bar order. -->
-  <script src="visuals/bars.js"></script>
-  <script src="visuals/radial.js"></script>
-  <script src="visuals/particles.js"></script>
-  <script src="visuals/scope.js"></script>
-  <script src="visuals/tunnel.js"></script>
-  <script src="visuals/kaleidoscope.js"></script>
-  <script src="visuals/terrain.js"></script>
-  <script src="visuals/goo.js"></script>
-  <script src="visuals/xyscope.js"></script>
-  <script src="visuals/flower.js"></script>
-  <script src="visuals/rain.js"></script>
-  <script src="visuals/amoeba.js"></script>
-  <script src="visuals/lightning.js"></script>
-  <script src="visuals/tree.js"></script>
-  <script src="visuals/hypno.js"></script>
-  <script src="visuals/stereo.js"></script>
-  <script src="visuals/dancer.js"></script>
-  <script src="app.js"></script>
+  <script src="controls.js"></script>
 </body>
 </html>

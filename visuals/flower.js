@@ -5,11 +5,11 @@
 
   const flower = { rot: 0 };
   function draw(api) {
-    const { ctx, W, H, state, fade, spec } = api;
+    const { ctx, W, H, state, fade, spec, flow, time } = api;
     fade(0.2);
     const R = Math.min(W, H) * 0.47, n = 520;
-    flower.rot += 0.002 + state.mid * 0.02;
-    const ga = (137.508 + Math.sin(performance.now() / 6000) * 0.25) * Math.PI / 180;
+    flower.rot += (0.002 + state.mid * 0.02) * flow;
+    const ga = (137.508 + Math.sin(time / 6) * 0.25) * Math.PI / 180;
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 1; i < n; i++) {
       const f = i / n;
@@ -24,5 +24,5 @@
     ctx.globalCompositeOperation = 'source-over';
   }
 
-  MRD.register({ name: 'Flower', draw });
+  MRD.register({ name: 'Flower', draw, motion: true, reverseLabel: 'Spins the other way' });
 })();

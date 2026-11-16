@@ -5,11 +5,12 @@
 
   const hypno = { rot: 0, vel: 0 };
   function draw(api) {
-    const { ctx, W, H, state, fade } = api;
+    const { ctx, W, H, state, fade, dt, flow } = api;
     fade(0.3);
-    hypno.vel = hypno.vel * 0.95 + state.level * 0.004;
+    // The beat-driven spin builds and decays in real time; speed and direction scale how far it turns.
+    hypno.vel = hypno.vel * Math.pow(0.95, dt * 60) + state.level * 0.004 * dt * 60;
     if (state.onset) hypno.vel += 0.06;
-    hypno.rot += 0.004 + hypno.vel;
+    hypno.rot += (0.004 + hypno.vel) * flow;
     const R = Math.hypot(W, H) / 2, arms = 4;
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
@@ -28,5 +29,5 @@
     ctx.globalCompositeOperation = 'source-over';
   }
 
-  MRD.register({ name: 'Hypno', draw });
+  MRD.register({ name: 'Hypno', draw, motion: true, reverseLabel: 'Spiral turns the other way' });
 })();
